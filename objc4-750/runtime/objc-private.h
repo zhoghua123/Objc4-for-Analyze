@@ -58,9 +58,21 @@ namespace {
 
 #include "isa.h"
 
+/**
+ 这个第一次见，联合居然内部也可以有函数，而且可以初始化列表，从C++角度分析，把isa_t当成一个类，更容易分析
+ 
+ */
 union isa_t {
+    //构造函数
     isa_t() { }
+    //构造函数2，同时具有初始化列表
     isa_t(uintptr_t value) : bits(value) { }
+    /*
+     //等价于
+     isa_t(uintptr_t value){
+     this->bits = value;
+     }
+     */
 
     Class cls;
     uintptr_t bits;
