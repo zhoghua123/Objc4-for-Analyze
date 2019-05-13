@@ -98,7 +98,7 @@ class nocopy_t {
 #   include <mach-o/dyld.h>
 #   include <mach-o/ldsyms.h>
 #   include <mach-o/loader.h>
-#   include <mach-o/getsect.h>
+#   include <mach-o/getsect.h>pthread
 #   include <mach-o/dyld_priv.h>
 #   include <malloc/malloc.h>
 #   include <os/lock_private.h>
