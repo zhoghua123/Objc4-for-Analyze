@@ -176,8 +176,10 @@ namespace objc_references_support {
         void operator delete(void *ptr) { ::free(ptr); }
     };
     typedef ObjcAllocator<std::pair<const disguised_ptr_t, ObjectAssociationMap*> > AssociationsHashMapAllocator;
+    
     class AssociationsHashMap : public unordered_map<disguised_ptr_t, ObjectAssociationMap *, DisguisedPointerHash, DisguisedPointerEqual, AssociationsHashMapAllocator> {
     public:
+        //重载 new()、delete()操作符
         void *operator new(size_t n) { return ::malloc(n); }
         void operator delete(void *ptr) { ::free(ptr); }
     };
@@ -193,19 +195,22 @@ using namespace objc_references_support;
 spinlock_t AssociationsManagerLock;
 
 class AssociationsManager {
+    //静态成员变量
     // associative references: object pointer -> PtrPtrHashMap.
     static AssociationsHashMap *_map;
 public:
+    //构造、析构函数
     AssociationsManager()   { AssociationsManagerLock.lock(); }
     ~AssociationsManager()  { AssociationsManagerLock.unlock(); }
     
+    //成员函数associations
     AssociationsHashMap &associations() {
         if (_map == NULL)
             _map = new AssociationsHashMap();
         return *_map;
     }
 };
-
+//静态成员变量初始化
 AssociationsHashMap *AssociationsManager::_map = NULL;
 
 // expanded policy bits.
@@ -268,11 +273,15 @@ struct ReleaseValue {
     }
 };
 
+//纯C++代码
 void _object_set_associative_reference(id object, void *key, id value, uintptr_t policy) {
+    //创建old_association对象
     // retain the new value (if any) outside the lock.
     ObjcAssociation old_association(0, nil);
+    
     id new_value = value ? acquireValue(value, policy) : nil;
     {
+        
         AssociationsManager manager;
         AssociationsHashMap &associations(manager.associations());
         disguised_ptr_t disguised_object = DISGUISE(object);
@@ -312,6 +321,7 @@ void _object_set_associative_reference(id object, void *key, id value, uintptr_t
     // release the old value (outside of the lock).
     if (old_association.hasValue()) ReleaseValue()(old_association);
 }
+
 
 void _object_remove_assocations(id object) {
     vector< ObjcAssociation,ObjcAllocator<ObjcAssociation> > elements;
