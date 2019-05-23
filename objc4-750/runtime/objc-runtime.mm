@@ -566,7 +566,16 @@ id objc_getAssociatedObject(id object, const void *key) {
 }
 
 
+/**
+ 对象关联api
+
+ @param object 要关联的对象
+ @param key key值
+ @param value 关联的对象
+ @param policy 关联策略
+ */
 void objc_setAssociatedObject(id object, const void *key, id value, objc_AssociationPolicy policy) {
+    //函数调用
     _object_set_associative_reference(object, (void *)key, value, policy);
 }
 

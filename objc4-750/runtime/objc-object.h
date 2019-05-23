@@ -524,6 +524,7 @@ objc_object::rootRetain(bool tryRetain, bool handleOverflow)
 
 
 // Equivalent to calling [this release], with shortcuts if there is no override
+//内联函数
 inline void
 objc_object::release()
 {

@@ -99,7 +99,7 @@ namespace objc_references_support {
     };
 
     // STL allocator that uses the runtime's internal allocator.
-    
+    //类模板
     template <typename T> struct ObjcAllocator {
         typedef T                 value_type;
         typedef value_type*       pointer;
@@ -122,6 +122,7 @@ namespace objc_references_support {
         }
 
         pointer allocate(size_type n, const_pointer = 0) {
+            //static_cast强制转换
             return static_cast<pointer>(::malloc(n * sizeof(T)));
         }
 
@@ -148,20 +149,30 @@ namespace objc_references_support {
         template <typename U> struct rebind { typedef ObjcAllocator<U> other; };
     };
   
+    //uintptr_t作用： 把指针转化成整数形式
+    //~:按位非,将二进制数据按位取反
     typedef uintptr_t disguised_ptr_t;
+    //内联函数
+    //~uintptr_t(value)：将value强制转换成整数形式，然后按二进制位取反 ,举例：int(3.5);
     inline disguised_ptr_t DISGUISE(id value) { return ~uintptr_t(value); }
+    
+    //id(~dptr):将dptr按位取反，然后强制转为指针类型
     inline id UNDISGUISE(disguised_ptr_t dptr) { return id(~dptr); }
   
+    /*********ObjcAssociation类**********/
     class ObjcAssociation {
+        //成员变量
         uintptr_t _policy;
         id _value;
+        
     public:
+        //构造函数
         ObjcAssociation(uintptr_t policy, id value) : _policy(policy), _value(value) {}
         ObjcAssociation() : _policy(0), _value(nil) {}
-
+        
+        //成员函数，get方法
         uintptr_t policy() const { return _policy; }
         id value() const { return _value; }
-        
         bool hasValue() { return _value != nil; }
     };
 
@@ -169,14 +180,18 @@ namespace objc_references_support {
     typedef hash_map<void *, ObjcAssociation> ObjectAssociationMap;
     typedef hash_map<disguised_ptr_t, ObjectAssociationMap *> AssociationsHashMap;
 #else
+    
     typedef ObjcAllocator<std::pair<void * const, ObjcAssociation> > ObjectAssociationMapAllocator;
     class ObjectAssociationMap : public std::map<void *, ObjcAssociation, ObjectPointerLess, ObjectAssociationMapAllocator> {
     public:
         void *operator new(size_t n) { return ::malloc(n); }
         void operator delete(void *ptr) { ::free(ptr); }
     };
-    typedef ObjcAllocator<std::pair<const disguised_ptr_t, ObjectAssociationMap*> > AssociationsHashMapAllocator;
     
+    
+    /*********AssociationsHashMap类**********/
+    typedef ObjcAllocator<std::pair<const disguised_ptr_t, ObjectAssociationMap*> > AssociationsHashMapAllocator;
+//unordered_map是一个类模板，AssociationsHashMap继承自unordered_map，而且指定了相应的类型
     class AssociationsHashMap : public unordered_map<disguised_ptr_t, ObjectAssociationMap *, DisguisedPointerHash, DisguisedPointerEqual, AssociationsHashMapAllocator> {
     public:
         //重载 new()、delete()操作符
@@ -193,6 +208,8 @@ using namespace objc_references_support;
 // method lazily allocates the hash table.
 
 spinlock_t AssociationsManagerLock;
+
+/*********AssociationsManager类**********/
 
 class AssociationsManager {
     //静态成员变量
@@ -212,6 +229,8 @@ public:
 };
 //静态成员变量初始化
 AssociationsHashMap *AssociationsManager::_map = NULL;
+
+
 
 // expanded policy bits.
 
@@ -250,25 +269,35 @@ id _object_get_associative_reference(id object, void *key) {
     }
     return value;
 }
-
+/*********acquireValue函数，用于管理内存**********/
 static id acquireValue(id value, uintptr_t policy) {
     switch (policy & 0xFF) {
+            
     case OBJC_ASSOCIATION_SETTER_RETAIN:
+        //内存管理：retain
         return objc_retain(value);
     case OBJC_ASSOCIATION_SETTER_COPY:
+            
+        //内存管理调用copy
         return ((id(*)(id, SEL))objc_msgSend)(value, SEL_copy);
     }
     return value;
 }
+/*********releaseValue函数**********/
 
 static void releaseValue(id value, uintptr_t policy) {
+    //如果是OBJC_ASSOCIATION_SETTER_RETAIN策略，就释放改value的内存
     if (policy & OBJC_ASSOCIATION_SETTER_RETAIN) {
+        //释放内存
         return objc_release(value);
     }
 }
 
+/*********ReleaseValue对象**********/
 struct ReleaseValue {
+    //操作符（）重载函数
     void operator() (ObjcAssociation &association) {
+        //函数调用
         releaseValue(association.value(), association.policy());
     }
 };
@@ -279,12 +308,27 @@ void _object_set_associative_reference(id object, void *key, id value, uintptr_t
     // retain the new value (if any) outside the lock.
     ObjcAssociation old_association(0, nil);
     
+    //新值根据policy的类型，retain或者copy，内存管理
     id new_value = value ? acquireValue(value, policy) : nil;
+    
+    //代码块
     {
-        
+        //局部变量manager、associations
         AssociationsManager manager;
+        //！！！！！： 调用拷贝构造函数，创建一个对象： AssociationsHashMap &associations(AssociationsHashMap对象）
+        //等价于AssociationsHashMap &associations = manager.associations();
         AssociationsHashMap &associations(manager.associations());
+        
+        //disguised_ptr_t是一个unsigned long 数据类型
+        //将object指针转换为无符号整型数据
         disguised_ptr_t disguised_object = DISGUISE(object);
+        
+        /*
+         associations的作用：
+         1. 相当于一个字典
+         */
+        
+        //新值存在
         if (new_value) {
             // break any existing association.
             AssociationsHashMap::iterator i = associations.find(disguised_object);
@@ -305,7 +349,8 @@ void _object_set_associative_reference(id object, void *key, id value, uintptr_t
                 (*refs)[key] = ObjcAssociation(policy, new_value);
                 object->setHasAssociatedObjects();
             }
-        } else {
+            
+        } else {//新值为nil
             // setting the association to nil breaks the association.
             AssociationsHashMap::iterator i = associations.find(disguised_object);
             if (i !=  associations.end()) {
@@ -318,6 +363,7 @@ void _object_set_associative_reference(id object, void *key, id value, uintptr_t
             }
         }
     }
+    //释放旧值
     // release the old value (outside of the lock).
     if (old_association.hasValue()) ReleaseValue()(old_association);
 }
