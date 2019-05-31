@@ -331,19 +331,26 @@ objc_object::hasAssociatedObjects()
 }
 
 
+//内联函数setHasAssociatedObjects()
 inline void
 objc_object::setHasAssociatedObjects()
 {
     if (isTaggedPointer()) return;
-
+//goto语句
  retry:
+    //isa_t为联合体，任何一个成员的地址都是isa对象的地址
     isa_t oldisa = LoadExclusive(&isa.bits);
     isa_t newisa = oldisa;
+    
+    //没有采用位域优化功能，或者已经设置过了has_assoc位为true，则返回
     if (!newisa.nonpointer  ||  newisa.has_assoc) {
         ClearExclusive(&isa.bits);
         return;
     }
+    
+    //设置isa中bits的has_assoc二进制位为true
     newisa.has_assoc = true;
+    
     if (!StoreExclusive(&isa.bits, oldisa.bits, newisa.bits)) goto retry;
 }
 

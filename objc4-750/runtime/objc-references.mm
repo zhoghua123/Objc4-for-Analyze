@@ -99,7 +99,7 @@ namespace objc_references_support {
     };
 
     // STL allocator that uses the runtime's internal allocator.
-    //类模板
+    //类模板ObjcAllocator
     template <typename T> struct ObjcAllocator {
         typedef T                 value_type;
         typedef value_type*       pointer;
@@ -142,6 +142,7 @@ namespace objc_references_support {
 
     };
 
+    
     template<> struct ObjcAllocator<void> {
         typedef void        value_type;
         typedef void*       pointer;
@@ -188,8 +189,9 @@ namespace objc_references_support {
         void operator delete(void *ptr) { ::free(ptr); }
     };
     
-    
+   
     /*********AssociationsHashMap类**********/
+    //pair:对组，只有2个元素，pair<t1,t2>：t1,t2分别代表内部的2个元素的类型
     typedef ObjcAllocator<std::pair<const disguised_ptr_t, ObjectAssociationMap*> > AssociationsHashMapAllocator;
 //unordered_map是一个类模板，AssociationsHashMap继承自unordered_map，而且指定了相应的类型
     class AssociationsHashMap : public unordered_map<disguised_ptr_t, ObjectAssociationMap *, DisguisedPointerHash, DisguisedPointerEqual, AssociationsHashMapAllocator> {
@@ -302,9 +304,24 @@ struct ReleaseValue {
     }
 };
 
+
+/*
+ associations的作用：
+ 1. 相当于一个字典，AssociationsHashMap类型
+ 2. find函数作用：返回容器中find参数相等的元素的迭代器
+    1. 对于map来说：如果存在，就返回相应的迭代器，反之返回map.end();
+ 3. 内部存储的元素为ObjectAssociationMap，也是一个map类型
+ 4. 因此associations是一个字典中包含字典的集合
+    1. 一级字典的key是object的整型值转化，value是字典
+    2. 二级字典的key是参数key，value是ObjcAssociation对象类型，内部存储policy跟value
+ 5. associations是个静态成员变量，整个程序过程中不死
+    1. 因此每次重新创建associations，他的值仍然没有改变
+    2. 整个应用程序都是用这同一个associations来存储每个对象的关联对象
+ */
+
 //纯C++代码
 void _object_set_associative_reference(id object, void *key, id value, uintptr_t policy) {
-    //创建old_association对象
+    //创建old_association对象，专门用于存储polic和value的
     // retain the new value (if any) outside the lock.
     ObjcAssociation old_association(0, nil);
     
@@ -322,42 +339,53 @@ void _object_set_associative_reference(id object, void *key, id value, uintptr_t
         //disguised_ptr_t是一个unsigned long 数据类型
         //将object指针转换为无符号整型数据
         disguised_ptr_t disguised_object = DISGUISE(object);
-        
-        /*
-         associations的作用：
-         1. 相当于一个字典
-         */
-        
+
         //新值存在
         if (new_value) {
+            //根据key值disguised_object获取迭代器
             // break any existing association.
             AssociationsHashMap::iterator i = associations.find(disguised_object);
-            if (i != associations.end()) {
+            if (i != associations.end()) { //找到
+                //拿到disguised_object值对应的value：
                 // secondary table exists
                 ObjectAssociationMap *refs = i->second;
+                
+                //根据key值拿到对应的value
                 ObjectAssociationMap::iterator j = refs->find(key);
-                if (j != refs->end()) {
+                if (j != refs->end()) {//找到
+                    //旧的old_association
                     old_association = j->second;
                     j->second = ObjcAssociation(policy, new_value);
-                } else {
+                    
+                } else {//没有找到
+                    //创建一个新的存储
                     (*refs)[key] = ObjcAssociation(policy, new_value);
                 }
-            } else {
+                
+            } else { //没找到
+                //第一次对象关联
                 // create the new association (first time).
+                //第一value值
                 ObjectAssociationMap *refs = new ObjectAssociationMap;
+                //设置键值，key为object的整型值
                 associations[disguised_object] = refs;
+                //设置键值：key为传入的key值，value为ObjcAssociation对象
                 (*refs)[key] = ObjcAssociation(policy, new_value);
+                
+                //设置object对象的isa指针的bits对应has_assoc的二进制位位1
                 object->setHasAssociatedObjects();
             }
             
         } else {//新值为nil
             // setting the association to nil breaks the association.
             AssociationsHashMap::iterator i = associations.find(disguised_object);
-            if (i !=  associations.end()) {
+            if (i !=  associations.end()) { //找到
                 ObjectAssociationMap *refs = i->second;
                 ObjectAssociationMap::iterator j = refs->find(key);
-                if (j != refs->end()) {
+                if (j != refs->end()) {//找到
+                    //记录旧值
                     old_association = j->second;
+                    //删除value
                     refs->erase(j);
                 }
             }

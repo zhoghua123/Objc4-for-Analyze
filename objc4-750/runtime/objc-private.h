@@ -49,6 +49,7 @@
 struct objc_class;
 struct objc_object;
 
+//Class就是objc_class 指针，id就是objc_object指针
 typedef struct objc_class *Class;
 typedef struct objc_object *id;
 
@@ -59,7 +60,10 @@ namespace {
 #include "isa.h"
 
 /**
+ 联合体对象：
  这个第一次见，联合居然内部也可以有函数，而且可以初始化列表，从C++角度分析，把isa_t当成一个类，更容易分析
+cls、bits、无名结构体这3个成员公用一块8个字节的内存
+ 
  */
 union isa_t {
     //构造函数
@@ -73,8 +77,9 @@ union isa_t {
      }
      */
 
-    Class cls;
-    uintptr_t bits;
+    Class cls; //8个字节，64位
+    uintptr_t bits; //8个字节64位
+    //内存对齐也是64位
 #if defined(ISA_BITFIELD)
     struct {
         ISA_BITFIELD;  // defined in isa.h
@@ -82,12 +87,18 @@ union isa_t {
 #endif
 };
 
+
+/**
+ 根类，objc_class类继承objc_object
+ 只有一个成员变量isa，是一个联合体对象类型
+ 其余都是成员函数
+ */
 struct objc_object {
 private:
     isa_t isa;
 
 public:
-
+    
     // ISA() assumes this is NOT a tagged pointer object
     Class ISA();
 
@@ -115,8 +126,10 @@ public:
     bool isExtTaggedPointer();
     bool isClass();
 
+    //object对象是否有关联对象
     // object may have associated objects?
     bool hasAssociatedObjects();
+    //object对象设置有关联对象标识
     void setHasAssociatedObjects();
 
     // object may be weakly referenced?

@@ -243,6 +243,7 @@ ldp(uintptr_t& onep, uintptr_t& twop, const void *srcp)
 // Class points to cache. SEL is key. Cache buckets store SEL+IMP.
 // Caches are never built in the dyld shared cache.
 
+//内联函数，静态函数
 static inline mask_t cache_hash(cache_key_t key, mask_t mask) 
 {
     return (mask_t)(key & mask);
@@ -521,18 +522,30 @@ void cache_t::bad_cache(id receiver, SEL sel, Class isa)
 }
 
 
+/**
+ 获取缓存方法
+
+ @param k 传入的@selector(方法名)
+ @param receiver 方法的接收这
+ @return 返回方法bucket_t
+ */
 bucket_t * cache_t::find(cache_key_t k, id receiver)
 {
     assert(k != 0);
-
+    //拿到该类所有的缓存方法列表数组--散列表
     bucket_t *b = buckets();
+    //拿到该类散列表长度-1值，就是数组长度-1
     mask_t m = mask();
+    //cache_hash是个内联函数，本质是：k&m
     mask_t begin = cache_hash(k, m);
+    //将begin作为遍历的第一个值
     mask_t i = begin;
     do {
+        //拿到数组元素bucket_t中的key值，如果为0，或者等于k，那么就返回这个方法存储对象bucket_t指针
         if (b[i].key() == 0  ||  b[i].key() == k) {
             return &b[i];
         }
+        //如果不成立，i-1,继续遍历，直到找到k==对应元素的key
     } while ((i = cache_next(i, m)) != begin);
 
     // hack

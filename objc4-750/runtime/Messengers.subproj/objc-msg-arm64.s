@@ -298,19 +298,26 @@ _objc_debug_taggedpointer_classes:
 _objc_debug_taggedpointer_ext_classes:
 	.fill 256, 8, 0
 #endif
-
+//定义段
+//函数调用栈
 	ENTRY _objc_msgSend
 	UNWIND _objc_msgSend, NoFrame
-
+//1. 判断第一个参数是否为0
+//cmp 比较指令，p0是寄存器，存放第一个参数receiver
 	cmp	p0, #0			// nil check and tagged pointer check
+//1.1 如果小于等于0，直接退出函数
 #if SUPPORT_TAGGED_POINTERS
+//b 条件跳转，le：条件，小于等于  如果p0<=0,直接跳转到LNilOrTagged
 	b.le	LNilOrTagged		//  (MSB tagged pointer looks negative)
 #else
 	b.eq	LReturnZero
 #endif
+//2. 将isa指针的值存入到p13寄存器。x0寄存器内部存储的是isa指针的值
 	ldr	p13, [x0]		// p13 = isa
+//3. 将p13寄存器同步到p16中
 	GetClassFromIsa_p16 p13		// p16 = class
 LGetIsaDone:
+//4. 查找方法缓存
 	CacheLookup NORMAL		// calls imp or objc_msgSend_uncached
 
 #if SUPPORT_TAGGED_POINTERS
@@ -456,6 +463,7 @@ LLookup_Nil:
 
 	// receiver and selector already in x0 and x1
 	mov	x2, x16
+    //调用C函数_class_lookupMethodAndLoadCache3查找
 	bl	__class_lookupMethodAndLoadCache3
 
 	// IMP in x0

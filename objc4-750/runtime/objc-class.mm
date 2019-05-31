@@ -617,13 +617,15 @@ static void _class_resolveClassMethod(Class cls, SEL sel, id inst)
 **********************************************************************/
 static void _class_resolveInstanceMethod(Class cls, SEL sel, id inst)
 {
+    //如果当前对象没有实现resolveInstanceMethod方法，则直接返回
     if (! lookUpImpOrNil(cls->ISA(), SEL_resolveInstanceMethod, cls, 
                          NO/*initialize*/, YES/*cache*/, NO/*resolver*/)) 
     {
         // Resolver not implemented.
         return;
     }
-
+    
+    //如果有resolveInstanceMethod实现，直接调用resolveInstanceMethod方法
     BOOL (*msg)(Class, SEL, SEL) = (typeof(msg))objc_msgSend;
     bool resolved = msg(cls, SEL_resolveInstanceMethod, sel);
 
@@ -659,11 +661,15 @@ static void _class_resolveInstanceMethod(Class cls, SEL sel, id inst)
 **********************************************************************/
 void _class_resolveMethod(Class cls, SEL sel, id inst)
 {
+    //不是元类对象
     if (! cls->isMetaClass()) {
+        //实例方法解析，调用类方法：resolveInstanceMethod
         // try [cls resolveInstanceMethod:sel]
         _class_resolveInstanceMethod(cls, sel, inst);
     } 
     else {
+        //类方法解析
+        //调用类方法：resolveClassMethod
         // try [nonMetaClass resolveClassMethod:sel]
         // and [cls resolveInstanceMethod:sel]
         _class_resolveClassMethod(cls, sel, inst);

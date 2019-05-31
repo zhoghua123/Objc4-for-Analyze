@@ -78,6 +78,7 @@ public:
 
     void expand();
     void reallocate(mask_t oldCapacity, mask_t newCapacity);
+    //通过该方法获取缓存的方法
     struct bucket_t * find(cache_key_t key, id receiver);
 
     static void bad_cache(id receiver, SEL sel, Class isa) __attribute__((noreturn));
@@ -218,11 +219,11 @@ struct entsize_list_tt {
     };
 };
 
-
+//对方法函数的封装
 struct method_t {
-    SEL name;
-    const char *types;
-    MethodListIMP imp;
+    SEL name;//函数名
+    const char *types;//编码（返回值类型、参数类型）
+    MethodListIMP imp;//指向函数的指针(函数地址)
 
     struct SortBySELAddress :
         public std::binary_function<const method_t&,
@@ -792,7 +793,7 @@ class list_array_tt {
     }
 };
 
-
+//method_array_t类，继承自list_array_tt类模板
 class method_array_t : 
     public list_array_tt<method_t, method_list_t> 
 {
@@ -806,6 +807,7 @@ class method_array_t :
     method_list_t **endCategoryMethodLists(Class cls);
 
     method_array_t duplicate() {
+        //函数模板调用
         return Super::duplicate<method_array_t>();
     }
 };
@@ -842,9 +844,9 @@ struct class_rw_t {
 
     const class_ro_t *ro;
 
-    method_array_t methods;
-    property_array_t properties;
-    protocol_array_t protocols;
+    method_array_t methods; //方法列表
+    property_array_t properties;//属性列表
+    protocol_array_t protocols;//协议列表
 
     Class firstSubclass;
     Class nextSiblingClass;

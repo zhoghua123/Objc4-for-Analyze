@@ -4723,8 +4723,10 @@ static method_t *search_method_list(const method_list_t *mlist, SEL sel)
     int methodListHasExpectedSize = mlist->entsize() == sizeof(method_t);
     
     if (__builtin_expect(methodListIsFixedUp && methodListHasExpectedSize, 1)) {
+        //数组元素排好序：二分查找
         return findMethodInSortedMethodList(sel, mlist);
     } else {
+        //无序： 线性查找
         // Linear search of unsorted method list
         for (auto& meth : *mlist) {
             if (meth.name == sel) return &meth;
@@ -4744,6 +4746,7 @@ static method_t *search_method_list(const method_list_t *mlist, SEL sel)
 
     return nil;
 }
+
 
 static method_t *
 getMethodNoSuper_nolock(Class cls, SEL sel)
@@ -4876,16 +4879,18 @@ IMP _class_lookupMethodAndLoadCache3(id obj, SEL sel, Class cls)
 *   must be converted to _objc_msgForward or _objc_msgForward_stret.
 *   If you don't want forwarding at all, use lookUpImpOrNil() instead.
 **********************************************************************/
+//查找方法：这个方法的名字查找IMP或者Forward
 IMP lookUpImpOrForward(Class cls, SEL sel, id inst, 
                        bool initialize, bool cache, bool resolver)
 {
     //先定义返回的方法
     IMP imp = nil;
-    bool triedResolver = NO;
+    bool triedResolver = NO; //是否试过动态方法解析
 
     runtimeLock.assertUnlocked();
 
-    //现在缓存中查找
+    //指定在缓存中查找，那么久直接查找
+    //cache_getImp实现部分是汇编
     if (cache) {
         imp = cache_getImp(cls, sel);
         if (imp) return imp;
@@ -4919,25 +4924,31 @@ IMP lookUpImpOrForward(Class cls, SEL sel, id inst,
         // from the messenger then it won't happen. 2778172
     }
 
+/*********消息发送的流程**********/
+   
+/*********第一阶段，消息查找：缓存、方法列表class_rw_t**********/
     
  retry:    
     runtimeLock.assertLocked();
 
+    //1.1 到当前类的类对象缓存中查找
     // Try this class's cache.
-
+    
     imp = cache_getImp(cls, sel);
     if (imp) goto done;
-
+    
+    //1.2 到当前类对象的class_rw_t中查找
     // Try this class's method lists.
     {
         Method meth = getMethodNoSuper_nolock(cls, sel);
         if (meth) {
+            //插入到缓存
             log_and_fill_cache(cls, meth->imp, sel, inst, cls);
             imp = meth->imp;
             goto done;
         }
     }
-
+    //1.3 到父类的缓存中和class_rw_t中查找
     // Try superclass caches and method lists.
     {
         unsigned attempts = unreasonableClassCount();
@@ -4949,11 +4960,12 @@ IMP lookUpImpOrForward(Class cls, SEL sel, id inst,
             if (--attempts == 0) {
                 _objc_fatal("Memory corruption in class list.");
             }
-            
+            //1.31 缓存
             // Superclass cache.
             imp = cache_getImp(curClass, sel);
             if (imp) {
                 if (imp != (IMP)_objc_msgForward_impcache) {
+                    //插入到缓存
                     // Found the method in a superclass. Cache it in this class.
                     log_and_fill_cache(cls, imp, sel, inst, curClass);
                     goto done;
@@ -4966,32 +4978,43 @@ IMP lookUpImpOrForward(Class cls, SEL sel, id inst,
                 }
             }
             
+            //1.32 列表
             // Superclass method list.
             Method meth = getMethodNoSuper_nolock(curClass, sel);
             if (meth) {
+                //插入到缓存
                 log_and_fill_cache(cls, meth->imp, sel, inst, curClass);
                 imp = meth->imp;
                 goto done;
             }
         }
     }
-
+    
+/*********第二阶段，动态方法解析_class_resolveMethod**********/
+    
+    //没有找到对应的方法实现，则尝试动态解析
     // No implementation found. Try method resolver once.
-
-    if (resolver  &&  !triedResolver) {
+    if (resolver  &&  !triedResolver) {//是否有过动态解析
         runtimeLock.unlock();
+        //动态解析
         _class_resolveMethod(cls, sel, inst);
         runtimeLock.lock();
+        //标记已经解析
         // Don't cache the result; we don't hold the lock so it may have 
         // changed already. Re-do the search from scratch instead.
         triedResolver = YES;
+        //重新走消息发送阶段，第一阶段
         goto retry;
     }
-
+    
+/*********第三阶段，消息转发： 使用forwarding**********/
+    
+    //没有找到方法实现，而且也没有动态解析，则使用forwarding
     // No implementation found, and method resolver didn't help. 
     // Use forwarding.
 
     imp = (IMP)_objc_msgForward_impcache;
+    //插入到缓存中
     cache_fill(cls, sel, imp, inst);
 
  done:
