@@ -52,10 +52,13 @@ id objc_getProperty(id self, SEL _cmd, ptrdiff_t offset, BOOL atomic) {
 
     // Retain release world
     id *slot = (id*) ((char*)self + offset);
+    //不是automic直接返回
     if (!atomic) return *slot;
-        
+    
+    //如果atomic
     // Atomic retain release world
     spinlock_t& slotlock = PropertyLocks[slot];
+    //加锁
     slotlock.lock();
     id value = objc_retain(*slot);
     slotlock.unlock();
@@ -90,10 +93,13 @@ static inline void reallySetProperty(id self, SEL _cmd, id newValue, ptrdiff_t o
         oldValue = *slot;
         *slot = newValue;
     } else {
+        
         spinlock_t& slotlock = PropertyLocks[slot];
+        //加锁
         slotlock.lock();
         oldValue = *slot;
-        *slot = newValue;        
+        *slot = newValue;
+        //解锁
         slotlock.unlock();
     }
 

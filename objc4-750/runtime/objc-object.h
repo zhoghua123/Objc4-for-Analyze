@@ -406,6 +406,7 @@ objc_object::rootIsDeallocating()
 inline void 
 objc_object::clearDeallocating()
 {
+    //不是优化isa位域
     if (slowpath(!isa.nonpointer)) {
         // Slow path for raw pointer isa.
         sidetable_clearDeallocating();
@@ -419,21 +420,28 @@ objc_object::clearDeallocating()
 }
 
 
+/**
+ 对象dealloc方法的本质
+ */
 inline void
 objc_object::rootDealloc()
 {
+    //如果是TaggedPointer直接返回，不需要dealloc
     if (isTaggedPointer()) return;  // fixme necessary?
-
+    
+    //如果是isa位域优化指针 && 没有被弱引用指向过（!isa.weakly_referenced）&& 没有设置关联对象（!isa.has_assoc） && 没有C++析构函数（!isa.has_cxx_dtor）&& 引用计数器没有溢出（isa内部够存储）（!isa.has_sidetable_rc）
     if (fastpath(isa.nonpointer  &&  
                  !isa.weakly_referenced  &&  
                  !isa.has_assoc  &&  
                  !isa.has_cxx_dtor  &&  
                  !isa.has_sidetable_rc))
     {
+        //直接释放
         assert(!sidetable_present());
         free(this);
     } 
     else {
+        //反之，需要调用这个函数释放
         object_dispose((id)this);
     }
 }
@@ -714,25 +722,40 @@ objc_object::rootAutorelease()
     return rootAutorelease2();
 }
 
-
+//获取引用计数器的值
 inline uintptr_t 
 objc_object::rootRetainCount()
 {
+    //1. 如果是TaggedPointer（当前不是对象类型），直接返回自己
     if (isTaggedPointer()) return (uintptr_t)this;
-
+    
+    //可能会多线程同时访问一个容器，因此需要加锁
+    //加锁
     sidetable_lock();
+    
+    //2. 拿到isa的bits
     isa_t bits = LoadExclusive(&isa.bits);
+    
     ClearExclusive(&isa.bits);
+    //3. 判断是否采用位域技术优化，即isa位域存储优化
     if (bits.nonpointer) {
+        //3.1 是isa优化，那么就到isa的位中分离出来
+        
+        // extra_rc+1 = 引用计数器的值
         uintptr_t rc = 1 + bits.extra_rc;
+        
+        //3.2 判断extra_rc是否不够存储，即是否存满，足够存储，直接返回r
         if (bits.has_sidetable_rc) {
+            //3.3 不够存储，到sidetable找，此时的引用计数器=extra_rc+1 + sidetable存储的值
             rc += sidetable_getExtraRC_nolock();
         }
+        //解锁
         sidetable_unlock();
         return rc;
     }
-
+    //解锁
     sidetable_unlock();
+    //4. 没有采用位域技术，即isa仅仅存储的是地址，那么就直接到sidetable类中找
     return sidetable_retainCount();
 }
 

@@ -271,18 +271,20 @@ enum
 typedef enum objc_tag_index_t objc_tag_index_t;
 #endif
 
-
+//判断tagged pointers 是否是enable
 // Returns true if tagged pointers are enabled.
 // The other functions below must not be called if tagged pointers are disabled.
 static inline bool 
 _objc_taggedPointersEnabled(void);
 
+//注册一个类为tagged pointer
 // Register a class for a tagged pointer tag.
 // Aborts if the tag is invalid or already in use.
 OBJC_EXPORT void
 _objc_registerTaggedPointerClass(objc_tag_index_t tag, Class _Nonnull cls)
     OBJC_AVAILABLE(10.9, 7.0, 9.0, 1.0, 2.0);
 
+//根据一个tag获取他的类Class
 // Returns the registered class for the given tag.
 // Returns nil if the tag is valid but has no registered class.
 // Aborts if the tag is invalid.
@@ -290,6 +292,7 @@ OBJC_EXPORT Class _Nullable
 _objc_getClassForTag(objc_tag_index_t tag)
     OBJC_AVAILABLE(10.9, 7.0, 9.0, 1.0, 2.0);
 
+//创建一个tagged pointer对象，通过
 // Create a tagged pointer object with the given tag and payload.
 // Assumes the tag is valid.
 // Assumes tagged pointers are enabled.
@@ -297,17 +300,20 @@ _objc_getClassForTag(objc_tag_index_t tag)
 static inline void * _Nonnull
 _objc_makeTaggedPointer(objc_tag_index_t tag, uintptr_t payload);
 
+//判断一个对象是否是tagged pointer
 // Return true if ptr is a tagged pointer object.
 // Does not check the validity of ptr's class.
 static inline bool 
 _objc_isTaggedPointer(const void * _Nullable ptr);
 
+//根据一个对象指针获取它的tag
 // Extract the tag value from the given tagged pointer object.
 // Assumes ptr is a valid tagged pointer object.
 // Does not check the validity of ptr's tag.
 static inline objc_tag_index_t 
 _objc_getTaggedPointerTag(const void * _Nullable ptr);
 
+//根据一个对象获取payload
 // Extract the payload from the given tagged pointer object.
 // Assumes ptr is a valid tagged pointer object.
 // The payload value is zero-extended.
@@ -321,12 +327,12 @@ static inline intptr_t
 _objc_getTaggedPointerSignedValue(const void * _Nullable ptr);
 
 // Don't use the values below. Use the declarations above.
-
+//mac开发
 #if (TARGET_OS_OSX || TARGET_OS_IOSMAC) && __x86_64__
-    // 64-bit Mac - tag bit is LSB
+    // 64-bit Mac - tag bit is LSB //mac开发64位
 #   define OBJC_MSB_TAGGED_POINTERS 0
-#else
-    // Everything else - tag bit is MSB
+#else //其他开发
+    // Everything else - tag bit is MSB 其他开发
 #   define OBJC_MSB_TAGGED_POINTERS 1
 #endif
 

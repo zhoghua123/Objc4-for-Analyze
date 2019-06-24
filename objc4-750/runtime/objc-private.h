@@ -121,6 +121,7 @@ public:
     Class changeIsa(Class newCls);
 
     bool hasNonpointerIsa();
+    //判断当前对象是否是TaggedPointer
     bool isTaggedPointer();
     bool isBasicTaggedPointer();
     bool isExtTaggedPointer();

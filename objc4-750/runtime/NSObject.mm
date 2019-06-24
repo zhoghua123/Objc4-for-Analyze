@@ -89,15 +89,18 @@ typedef objc::DenseMap<DisguisedPtr<objc_object>,size_t,true> RefcountMap;
 enum HaveOld { DontHaveOld = false, DoHaveOld = true };
 enum HaveNew { DontHaveNew = false, DoHaveNew = true };
 
+//当isa的位域不够存储计数器的值时会存储到这个类中
 struct SideTable {
     spinlock_t slock;
+    //是一个存放着对象引用计数的散列表
     RefcountMap refcnts;
     weak_table_t weak_table;
-
+    
+    //构造函数（分配内存）
     SideTable() {
         memset(&weak_table, 0, sizeof(weak_table));
     }
-
+    //析构函数
     ~SideTable() {
         _objc_fatal("Do not delete SideTable.");
     }
@@ -106,6 +109,7 @@ struct SideTable {
     void unlock() { slock.unlock(); }
     void forceReset() { slock.forceReset(); }
 
+    //函数模板
     // Address-ordered lock discipline for a pair of side tables.
 
     template<HaveOld, HaveNew>
@@ -114,7 +118,7 @@ struct SideTable {
     static void unlockTwo(SideTable *lock1, SideTable *lock2);
 };
 
-
+//函数模板
 template<>
 void SideTable::lockTwo<DoHaveOld, DoHaveNew>
     (SideTable *lock1, SideTable *lock2)
@@ -1391,13 +1395,21 @@ objc_object::sidetable_subExtraRC_nolock(size_t delta_rc)
 }
 
 
-size_t 
+/**
+ 额外的引用计数器值
+当前isa的extra_rc位不够存储，即has_sidetable_rc为1时，多余的计数器值会存储到这里
+ @return 额外的计数器值
+ */
+size_t
 objc_object::sidetable_getExtraRC_nolock()
 {
     assert(isa.nonpointer);
     SideTable& table = SideTables()[this];
+    //map容器查找，采用指示器
     RefcountMap::iterator it = table.refcnts.find(this);
+    //没有找到
     if (it == table.refcnts.end()) return 0;
+    //找到了，返回： it->second值，右移2位
     else return it->second >> SIDE_TABLE_RC_SHIFT;
 }
 
@@ -1456,16 +1468,24 @@ objc_object::sidetable_tryRetain()
 }
 
 
+/**
+ isa是非位域优化指针时
+ 直接到sidetable类中查找引用计数器的值
+
+ @return 值
+ */
 uintptr_t
 objc_object::sidetable_retainCount()
 {
+    //拿到table
     SideTable& table = SideTables()[this];
-
+   
     size_t refcnt_result = 1;
     
     table.lock();
     RefcountMap::iterator it = table.refcnts.find(this);
-    if (it != table.refcnts.end()) {
+    if (it != table.refcnts.end()) {//指示器不是最后一位，即计数器的值不为0
+        //返回引用计数器的值：it->second 右移2位，然后+1
         // this is valid for SIDE_TABLE_RC_PINNED too
         refcnt_result += it->second >> SIDE_TABLE_RC_SHIFT;
     }
@@ -2286,7 +2306,7 @@ void arr_init(void)
 + (NSUInteger)retainCount {
     return ULONG_MAX;
 }
-
+//返回引用计数器的值
 - (NSUInteger)retainCount {
     return ((id)self)->rootRetainCount();
 }
@@ -2313,7 +2333,7 @@ void arr_init(void)
 + (void)dealloc {
 }
 
-
+//对象的dealloc方法
 // Replaced by NSZombies
 - (void)dealloc {
     _objc_rootDealloc(self);

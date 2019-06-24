@@ -6690,16 +6690,24 @@ object_copyFromZone(id oldObj, size_t extraBytes, void *zone)
 * Removes associative references.
 * Returns `obj`. Does nothing if `obj` is nil.
 **********************************************************************/
+/**
+ dealloc的本质
+ */
 void *objc_destructInstance(id obj) 
 {
     if (obj) {
+        //是否有C++析构函数
         // Read all of the flags at once for performance.
         bool cxx = obj->hasCxxDtor();
+        //是否有关联对象
         bool assoc = obj->hasAssociatedObjects();
 
         // This order is important.
+        //调用C++析构函数，消除成员变量
         if (cxx) object_cxxDestruct(obj);
+        //移除关联对象
         if (assoc) _object_remove_assocations(obj);
+        //将指向当前对象的弱指针至为nil
         obj->clearDeallocating();
     }
 
