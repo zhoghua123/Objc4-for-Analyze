@@ -235,6 +235,7 @@ struct method_t {
     };
 };
 
+//成员变量的数据类型
 struct ivar_t {
 #if __x86_64__
     // *offset was originally 64-bit on some x86_64 platforms.
@@ -244,11 +245,16 @@ struct ivar_t {
     // Some code uses all 64 bits. class_addIvar() over-allocates the 
     // offset for their benefit.
 #endif
+    //成员变量在对象内存的偏移量
     int32_t *offset;
+    //名称
     const char *name;
+    //类型
     const char *type;
+    //对齐
     // alignment is sometimes -1; use alignment() instead
     uint32_t alignment_raw;
+    //大小
     uint32_t size;
 
     uint32_t alignment() const {
